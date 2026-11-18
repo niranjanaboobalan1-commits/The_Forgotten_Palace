@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Old Dusty Attic WebXR Opening Scene - Realistic Human Hands & 3 Keyboard Control Modes" />
+    <meta name="webxr" content="optionalFeatures: hand-tracking;" />
+    <link rel="icon" href="data:," />
+    <title>The Old Dusty Attic - Realistic Hands & 3 Keyboard Modes</title>
+
+    <!-- Error Catching Diagnostic Banner -->
+    <script>
+      window.addEventListener('error', function (e) {
+        var toast = document.getElementById('error-toast');
+        if (toast) {
+          toast.style.display = 'block';
+          toast.textContent = '[JS Error] ' + (e.message || e) + ' at ' + (e.filename || '') + ':' + (e.lineno || '');
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var toast = document.getElementById('error-toast');
+        if (toast) {
+          toast.style.display = 'block';
+          toast.textContent = '[Promise Rejection] ' + (e.reason && e.reason.message ? e.reason.message : e.reason);
+        }
+      });
+    </script>
+
+    <!-- Import Map for Standalone / CDN Execution & Fallback -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background-color: #14100e;
+        color: #e2e8f0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #scene-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 1;
+      }
+
+      /* Desktop HUD Overlay */
+      #desktop-hud {
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        z-index: 10;
+        width: 440px;
+        max-height: calc(100vh - 28px);
+        overflow-y: auto;
+        background: rgba(18, 14, 12, 0.90);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid rgba(210, 157, 125, 0.35);
+        box-shadow: 0 10px 36px rgba(0, 0, 0, 0.8), 0 0 20px rgba(210, 157, 125, 0.15);
+        border-radius: 12px;
+        padding: 14px 16px;
+        pointer-events: auto;
+        transition: all 0.25s ease;
+      }
+
+      #desktop-hud::-webkit-scrollbar {
+        width: 5px;
+      }
+      #desktop-hud::-webkit-scrollbar-thumb {
+        background: rgba(210, 157, 125, 0.3);
+        border-radius: 4px;
+      }
+
+      .hud-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        padding-bottom: 8px;
+      }
+      .hud-title {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .hud-title::before {
+        content: "";
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        background: #d29d7d;
+        border-radius: 50%;
+        box-shadow: 0 0 10px #d29d7d;
+      }
+
+      .badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background: rgba(210, 157, 125, 0.2);
+        color: #ffc4a4;
+        border: 1px solid rgba(210, 157, 125, 0.45);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      /* Control Mode Switcher Banner */
+      .mode-switcher {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .mode-btn {
+        background: rgba(30, 24, 22, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #94a3b8;
+        padding: 6px 4px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        text-align: center;
+        transition: all 0.2s ease;
+      }
+      .mode-btn.active {
+        background: rgba(210, 157, 125, 0.25);
+        border-color: #d29d7d;
+        color: #ffebd8;
+        box-shadow: 0 0 10px rgba(210, 157, 125, 0.35);
+      }
+
+      /* Live Real-Time Coordinates Card */
+      .coords-card {
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(210, 157, 125, 0.2);
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        color: #cbd5e1;
+      }
+      .coords-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .coords-label {
+        font-weight: 700;
+        color: #ffc4a4;
+      }
+      .coords-val {
+        color: #38bdf8;
+      }
+      .coords-posture {
+        color: #4ade80;
+        font-weight: 600;
+      }
+
+      /* 11 Interaction States List */
+      .step-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 10px;
+      }
+      .step-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        border-radius: 5px;
+        font-size: 11.5px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        color: #94a3b8;
+        transition: all 0.2s ease;
+      }
+      .step-num {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.1);
+        color: #cbd5e1;
+        flex-shrink: 0;
+      }
+      .step-item.active {
+        background: rgba(210, 157, 125, 0.2);
+        border-color: rgba(210, 157, 125, 0.7);
+        color: #fff1e5;
+        font-weight: 600;
+        box-shadow: 0 0 10px rgba(210, 157, 125, 0.25);
+      }
+      .step-item.active .step-num {
+        background: #d29d7d;
+        color: #1a0e08;
+      }
+      .step-item.done {
+        background: rgba(34, 197, 94, 0.22) !important;
+        border-color: rgba(34, 197, 94, 0.65) !important;
+        color: #86efac !important;
+      }
+      .step-item.done .step-num {
+        background: #22c55e !important;
+        color: #052e16 !important;
+        font-weight: 800;
+      }
+
+      /* Automated Showcase Mode Banner */
+      .showcase-banner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(34, 197, 94, 0.18);
+        border: 1px solid rgba(34, 197, 94, 0.45);
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin-bottom: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #86efac;
+        letter-spacing: 0.5px;
+      }
+      .showcase-pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      .showcase-pulse.active {
+        background: #22c55e;
+        box-shadow: 0 0 8px #22c55e;
+        animation: pulse 1.5s infinite;
+      }
+      .showcase-pulse.waiting {
+        background: #f59e0b;
+        box-shadow: 0 0 8px #f59e0b;
+        animation: pulse-amber 1.8s infinite;
+      }
+      @keyframes pulse {
+        0% { transform: scale(0.9); opacity: 0.7; }
+        50% { transform: scale(1.3); opacity: 1; }
+        100% { transform: scale(0.9); opacity: 0.7; }
+      }
+      @keyframes pulse-amber {
+        0% { transform: scale(0.9); opacity: 0.6; }
+        50% { transform: scale(1.2); opacity: 1; }
+        100% { transform: scale(0.9); opacity: 0.6; }
+      }
+
+      /* Instructions Banner */
+      .instructions {
+        font-size: 11px;
+        line-height: 1.45;
+        color: #cbd5e1;
+        background: rgba(0, 0, 0, 0.38);
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        border-left: 3px solid #d29d7d;
+      }
+      .instructions strong {
+        color: #ffc4a4;
+      }
+
+      /* Quick Action Buttons */
+      .btn-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .btn {
+        background: rgba(36, 28, 25, 0.9);
+        color: #f1f5f9;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: center;
+      }
+      .btn:hover {
+        background: rgba(210, 157, 125, 0.28);
+        border-color: #d29d7d;
+        color: #ffffff;
+        box-shadow: 0 0 10px rgba(210, 157, 125, 0.35);
+      }
+      .btn-primary {
+        background: rgba(210, 157, 125, 0.22);
+        border-color: rgba(210, 157, 125, 0.55);
+        color: #ffebd8;
+      }
+      .btn-gold {
+        background: rgba(255, 215, 0, 0.2);
+        border-color: rgba(255, 215, 0, 0.55);
+        color: #ffd700;
+      }
+      .btn-gold:hover {
+        background: rgba(255, 215, 0, 0.32);
+        border-color: #ffd700;
+        box-shadow: 0 0 12px rgba(255, 215, 0, 0.45);
+      }
+      .btn-reset {
+        background: rgba(239, 68, 68, 0.18);
+        border-color: rgba(239, 68, 68, 0.35);
+        color: #fca5a5;
+      }
+      .btn-reset:hover {
+        background: rgba(239, 68, 68, 0.28);
+        border-color: #ef4444;
+      }
+
+      /* On-Screen Diagnostic Error Toast */
+      #error-toast {
+        display: none;
+        position: fixed;
+        bottom: 84px;
+        left: 20px;
+        right: 20px;
+        background: rgba(185, 28, 28, 0.95);
+        color: #ffffff;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-family: monospace;
+        z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+      }
+
+      /* VR Button Override */
+      #VRButton {
+        position: fixed !important;
+        bottom: 20px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        background: rgba(210, 157, 125, 0.28) !important;
+        color: #ffffff !important;
+        border: 2px solid #d29d7d !important;
+        border-radius: 30px !important;
+        padding: 10px 24px !important;
+        font-weight: 700 !important;
+        font-size: 13px !important;
+        letter-spacing: 1px !important;
+        text-transform: uppercase !important;
+        backdrop-filter: blur(8px) !important;
+        box-shadow: 0 0 20px rgba(210, 157, 125, 0.45) !important;
+        z-index: 100 !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
+      }
+      #VRButton:hover {
+        background: rgba(210, 157, 125, 0.5) !important;
+        box-shadow: 0 0 30px rgba(210, 157, 125, 0.75) !important;
+        scale: 1.05;
+      }
+
+      /* Theme Toggle Pill in HUD Header */
+      .btn-theme-pill {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 14px;
+        background: rgba(255, 190, 80, 0.25);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.5);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        transition: all 0.2s ease;
+      }
+      .btn-theme-pill:hover {
+        background: rgba(255, 190, 80, 0.4);
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+      }
+
+      /* Video Recording Button & Pulse */
+      .btn-record {
+        background: linear-gradient(135deg, #be123c, #9f1239);
+        border: 1px solid #f43f5e;
+        color: #ffffff;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .btn-record:hover {
+        background: linear-gradient(135deg, #e11d48, #be123c);
+        box-shadow: 0 0 12px rgba(244, 63, 94, 0.6);
+      }
+      .btn-record.recording {
+        background: linear-gradient(135deg, #b91c1c, #dc2626);
+        animation: recPulse 1.5s infinite;
+        border-color: #ef4444;
+      }
+      @keyframes recPulse {
+        0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+        50% { box-shadow: 0 0 20px rgba(239, 68, 68, 1.0); }
+      }
+
+      /* -------------------------------------------------------------
+         LIGHT THEME STYLING FOR HUD OVERLAY
+         ------------------------------------------------------------- */
+      body.theme-light {
+        background-color: #dde9f5;
+        color: #2c221e;
+      }
+      body.theme-light #desktop-hud {
+        background: rgba(253, 250, 246, 0.94);
+        border: 1px solid rgba(160, 120, 80, 0.35);
+        box-shadow: 0 10px 36px rgba(0, 0, 0, 0.16), 0 0 20px rgba(220, 180, 140, 0.25);
+        color: #2b2118;
+      }
+      body.theme-light .hud-title {
+        color: #1e1610;
+      }
+      body.theme-light .badge {
+        background: rgba(180, 120, 70, 0.15);
+        color: #8c4c1a;
+        border-color: rgba(180, 120, 70, 0.35);
+      }
+      body.theme-light .mode-btn {
+        background: rgba(240, 232, 222, 0.85);
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        color: #574c43;
+      }
+      body.theme-light .mode-btn.active {
+        background: rgba(220, 160, 100, 0.25);
+        border-color: #b86e34;
+        color: #733406;
+        box-shadow: 0 0 10px rgba(184, 110, 52, 0.3);
+      }
+      body.theme-light .coords-card {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(180, 140, 100, 0.25);
+        color: #332a24;
+      }
+      body.theme-light .coords-label {
+        color: #9c4b12;
+      }
+      body.theme-light .coords-val {
+        color: #0369a1;
+      }
+      body.theme-light .coords-posture {
+        color: #16a34a;
+      }
+      body.theme-light .step-item {
+        background: rgba(245, 238, 228, 0.75);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        color: #44372e;
+      }
+      body.theme-light .step-item .step-num {
+        background: rgba(0, 0, 0, 0.08);
+        color: #64748b;
+      }
+      body.theme-light .step-item.active {
+        background: rgba(235, 175, 120, 0.22);
+        border-color: #b86e34;
+        color: #6d2f02;
+        box-shadow: 0 0 10px rgba(184, 110, 52, 0.2);
+      }
+      body.theme-light .step-item.done {
+        background: rgba(34, 197, 94, 0.12);
+        border-color: #16a34a;
+        color: #14532d;
+      }
+      body.theme-light .instructions {
+        background: rgba(255, 248, 235, 0.85);
+        border-color: rgba(210, 140, 60, 0.35);
+        color: #5c3814;
+      }
+      body.theme-light .showcase-banner {
+        background: rgba(248, 240, 230, 0.9);
+        border-color: rgba(180, 130, 80, 0.3);
+        color: #3d2f26;
+      }
+      body.theme-light .btn {
+        background: rgba(242, 235, 225, 0.9);
+        color: #2b2118;
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      body.theme-light .btn:hover {
+        background: rgba(230, 220, 206, 1.0);
+      }
+      body.theme-light .btn-primary {
+        background: rgba(195, 125, 65, 0.20);
+        border-color: #b86e34;
+        color: #6d2f02;
+      }
+      body.theme-light .btn-primary:hover {
+        background: rgba(195, 125, 65, 0.35);
+      }
+      body.theme-light .btn-reset {
+        background: rgba(220, 38, 38, 0.12);
+        border-color: rgba(220, 38, 38, 0.35);
+        color: #991b1b;
+      }
+      body.theme-light .btn-reset:hover {
+        background: rgba(220, 38, 38, 0.22);
+      }
+
+      /* Center Black Box Status Display (Game On / Game Over) */
+      .game-center-box {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.92);
+        background-color: #000000;
+        color: #ffffff;
+        padding: 26px 58px;
+        border-radius: 12px;
+        border: 4px solid #ffffff;
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.95), 0 0 25px rgba(255, 255, 255, 0.35);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 46px;
+        font-weight: 900;
+        letter-spacing: 5px;
+        text-transform: uppercase;
+        text-align: center;
+        pointer-events: none;
+        z-index: 100000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.45s;
+      }
+      .game-center-box.visible {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    </style>
+  </head>
+  <body class="theme-light">
+    <div id="scene-container"></div>
+    <div id="error-toast"></div>
+
+    <!-- Center Black Box Status Display -->
+    <div id="game-center-box" class="game-center-box">
+      <div id="game-center-text" class="game-center-text">Game On</div>
+    </div>
+
+    <!-- Desktop HUD & Debug Overlay -->
+    <div id="desktop-hud">
+      <div class="hud-header">
+        <span class="hud-title">Rustic Attic Scene</span>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button class="btn-theme-pill" id="btn-theme-pill" title="Toggle Light / Dark Theme">☀️ Light</button>
+          <span class="badge" id="hud-mode-badge">[1] Left Hand</span>
+        </div>
+      </div>
+
+      <!-- Automated Showcase Live Indicator -->
+      <div class="showcase-banner">
+        <span class="showcase-pulse waiting"></span>
+        <span id="showcase-status-text">WAITING FOR INPUT (Press Space/Enter)</span>
+        <button class="btn btn-primary" id="btn-toggle-showcase" style="margin-left: auto; padding: 3px 8px; font-size: 10px;">▶ Start Showcase [Space]</button>
+      </div>
+
+      <!-- Control Mode Selector -->
+      <div class="mode-switcher">
+        <button class="mode-btn active" id="mode-btn-1">[1] Left (WASD+QE)</button>
+        <button class="mode-btn" id="mode-btn-2">[2] Right (Arrows+RF)</button>
+        <button class="mode-btn" id="mode-btn-3">[3] Dual (Both)</button>
+      </div>
+
+      <!-- Real-Time Hand 3D Coordinates & Active Postures -->
+      <div class="coords-card">
+        <div class="coords-row">
+          <span class="coords-label">LEFT HAND:</span>
+          <span class="coords-val" id="coords-left">X: -0.52 Y: 0.72 Z: -0.58</span>
+          <span class="coords-posture" id="posture-left">[RELAXED]</span>
+        </div>
+        <div class="coords-row" style="margin-top: 4px;">
+          <span class="coords-label">RIGHT HAND:</span>
+          <span class="coords-val" id="coords-right">X: -0.16 Y: 0.65 Z: -0.55</span>
+          <span class="coords-posture" id="posture-right">[RELAXED]</span>
+        </div>
+      </div>
+
+      <!-- 11 Detailed Interaction States -->
+      <div class="step-list">
+        <div class="step-item active" id="step-1">
+          <span class="step-num">1</span>
+          <span>[LEFT] Reach to Tarp (VR Reach / WASD+QE)</span>
+        </div>
+        <div class="step-item" id="step-2">
+          <span class="step-num">2</span>
+          <span>[LEFT] Pinch Tarp Corner (VR Pinch &lt; 3.8cm / 'P' Key)</span>
+        </div>
+        <div class="step-item" id="step-3">
+          <span class="step-num">3</span>
+          <span>[LEFT] Pull Tarp (VR Pull Back / S Key)</span>
+        </div>
+        <div class="step-item" id="step-4">
+          <span class="step-num">4</span>
+          <span>[RIGHT] Approach Latch (VR Reach / Arrows+RF)</span>
+        </div>
+        <div class="step-item" id="step-5">
+          <span class="step-num">5</span>
+          <span>[RIGHT] Twist Latch Open (VR Pinch &amp; Twist / 'P' Key)</span>
+        </div>
+        <div class="step-item" id="step-6">
+          <span class="step-num">6</span>
+          <span>[RIGHT] Lift Lid (VR Raise Hand / R Key)</span>
+        </div>
+        <div class="step-item" id="step-7">
+          <span class="step-num">7</span>
+          <span>[LEFT] Reach into Box (VR Reach / WASD+QE)</span>
+        </div>
+        <div class="step-item" id="step-8">
+          <span class="step-num">8</span>
+          <span>[LEFT] Grasp Dreamcatcher (VR Grasp / 'P' Key)</span>
+        </div>
+        <div class="step-item" id="step-9">
+          <span class="step-num">9</span>
+          <span>[RIGHT] Support Hoop (VR Both Hands / [9])</span>
+        </div>
+        <div class="step-item" id="step-10">
+          <span class="step-num">10</span>
+          <span>[LEFT] First Brush Swipe (VR Palm Swipe / A-D)</span>
+        </div>
+        <div class="step-item" id="step-11">
+          <span class="step-num">11</span>
+          <span>[LEFT] Final Swipe &amp; Drop Shell <span id="brush-count-text">(0/2)</span></span>
+        </div>
+      </div>
+
+      <div class="instructions" id="instructions-box">
+        <strong>Ready:</strong> Press <strong>Space</strong>, <strong>Enter</strong>, or any key (or click <strong>▶ Start Showcase</strong>) to run the automated sequence.
+      </div>
+
+      <!-- Action Shortcut Buttons -->
+      <div class="btn-grid">
+        <button class="btn btn-primary" id="btn-pinch-action">[P] Trigger Pinch/Action</button>
+        <button class="btn" id="btn-recenter">Center View</button>
+        <button class="btn btn-primary" id="btn-tarp">[1-3] Pull Tarp</button>
+        <button class="btn btn-primary" id="btn-latch">[4-5] Turn Latch</button>
+        <button class="btn btn-primary" id="btn-lid">[6] Open Lid</button>
+        <button class="btn btn-primary" id="btn-lift">[7-8] Lift Dreamcatcher</button>
+        <button class="btn btn-primary" id="btn-support">[9] Hold Both Hands</button>
+        <button class="btn btn-gold" id="btn-brush">[10-11] Dust Swipe</button>
+      </div>
+
+      <div style="display: flex; gap: 6px; margin-top: 4px;">
+        <button class="btn btn-primary" id="btn-theme-toggle" style="width: 50%;">☀️ Light Theme [T]</button>
+        <button class="btn btn-reset" id="btn-reset" style="width: 50%;">[R] Reset Scene</button>
+      </div>
+
+      <div style="display: flex; gap: 6px; margin-top: 6px;">
+        <button class="btn btn-record" id="btn-record-video" style="width: 100%;">🎥 Record &amp; Download Full Video</button>
+      </div>
+    </div>
+
+    <!-- Application Module -->
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
